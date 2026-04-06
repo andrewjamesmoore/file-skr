@@ -3,6 +3,7 @@
 import { execFileSync, spawnSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import chalk from "chalk";
 
 interface Cache {
   query: string;
@@ -97,4 +98,48 @@ function buildGrepCommand(query: string, caseInsensitive: boolean): string[] {
   if (caseInsensitive) cmd.push("-i");
   cmd.push(query);
   return cmd;
+}
+
+function runSearch(cmd: string[]): string[] {
+  const [bin, ...args] = cmd;
+  const result = spawnSync(bin, args, {
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+
+  if (result.status !== null && result.status > 1) {
+    console.error(`Search tool error: ${result.stderr.trim()}`);
+    process.exit(1);
+  }
+
+  return result.stdout
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.replace(/^\.\//, ""));
+}
+
+function formatResults(query: string, lines: string[], total: number) {
+  const dot = chalk.dim("·");
+  const baseColor = chalk.white;
+  const accentColor = chalk.green;
+
+  console.log(`\n  ${accentColor.bold.inverse(`Results for "${query}"`)}\n`);
+
+  for (let i = 0; i < lines.length; i++) {
+    const dir = path.dirname(lines[i]);
+    const base = baseColor(path.basename(lines[i]));
+    const filePath = dir === "." ? base : `${baseColor.dim(dir + "/")}${base}`;
+    console.log(
+      `  ${accentColor(String(i + 1).padStart(2))} ${dot} ${filePath}`,
+    );
+  }
+
+  if (total > lines.length) {
+    console.log(
+      chalk.dim(
+        `\n  … showing ${lines.length} of ${total} results (use -a to show all)`,
+      ),
+    );
+  }
 }
