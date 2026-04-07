@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 
-import { execFileSync, spawnSync } from "child_process";
+import { execFileSync, spawn } from "child_process";
+import readline from "readline";
 import fs from "fs";
 import path from "path";
 import chalk from "chalk";
@@ -16,12 +17,12 @@ interface SearchOptions {
   showAll?: boolean;
 }
 
-const maxResults = 50;
+const maxResults = 100;
 const accentColor = chalk.green;
 const baseColor = chalk.white;
 
 if (!process.getuid) {
-  throw new Error("File system is not supported.");
+  throw new Error("Windows file system is not supported.");
 }
 
 const cacheDirectory = `/tmp/seeker/${process.getuid()}`;
@@ -104,26 +105,47 @@ function buildGrepCommand(query: string, caseInsensitive: boolean): string[] {
   return cmd;
 }
 
-function runSearch(cmd: string[]): string[] {
-  const [bin, ...args] = cmd;
-  const result = spawnSync(bin, args, {
-    encoding: "utf-8",
-    stdio: ["ignore", "pipe", "pipe"],
+function runSearch(cmd: string[], limit?: number): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const [bin, ...args] = cmd;
+    const proc = spawn(bin, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    const lines: string[] = [];
+    let stderr = "";
+    let killed = false;
+
+    const rl = readline.createInterface({ input: proc.stdout });
+
+    rl.on("line", (line) => {
+      const cleaned = line.replace(/^\.\//, "");
+      if (!cleaned) return;
+      lines.push(cleaned);
+      if (limit !== undefined && lines.length >= limit) {
+        killed = true;
+        rl.close();
+        proc.kill();
+      }
+    });
+
+    proc.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk;
+    });
+
+    proc.on("close", (code) => {
+      if (!killed && code !== null && code > 1) {
+        reject(new Error(`Search tool error: ${stderr.trim()}`));
+      } else {
+        resolve(lines);
+      }
+    });
+
+    proc.on("error", reject);
   });
-
-  if (result.status !== null && result.status > 1) {
-    console.error(`Search tool error: ${result.stderr.trim()}`);
-    process.exit(1);
-  }
-
-  return result.stdout
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => line.replace(/^\.\//, ""));
 }
 
-function formatResults(query: string, lines: string[], total: number) {
+function formatResults(query: string, lines: string[], truncated: boolean) {
   const dot = chalk.dim("·");
 
   console.log(`\n  ${accentColor.bold.inverse(`Results for "${query}"`)}\n`);
@@ -137,16 +159,16 @@ function formatResults(query: string, lines: string[], total: number) {
     );
   }
 
-  if (total > lines.length) {
+  if (truncated) {
     console.log(
       chalk.dim(
-        `\n  … showing ${lines.length} of ${total} results (use -a to show all)`,
+        `\n  … showing first ${lines.length} results (use -a to show all)`,
       ),
     );
   }
 }
 
-function search(
+async function search(
   query: string,
   {
     caseInsensitive = false,
@@ -158,7 +180,8 @@ function search(
     ? buildFindCommand(query, caseInsensitive)
     : buildGrepCommand(query, caseInsensitive);
 
-  const lines = runSearch(cmd);
+  const limit = showAll ? undefined : maxResults;
+  const lines = await runSearch(cmd, limit);
 
   if (lines.length === 0) {
     const mode = filenameOnly ? "filenames matching" : "files containing";
@@ -166,12 +189,10 @@ function search(
     process.exit(1);
   }
 
-  const total = lines.length;
-  const truncated = !showAll && total > maxResults;
-  const displayLines = truncated ? lines.slice(0, maxResults) : lines;
+  const truncated = !showAll && lines.length >= maxResults;
 
-  saveCache(query, displayLines);
-  formatResults(query, displayLines, total);
+  saveCache(query, lines);
+  formatResults(query, lines, truncated);
 }
 
 function doCat(n: number) {
@@ -253,7 +274,7 @@ function printHelp() {
 `);
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
 
   if (args.length === 0 || ["-h", "--help", "-help"].includes(args[0])) {
@@ -297,7 +318,14 @@ function main() {
     return;
   }
 
-  search(queryParts.join(" "), { caseInsensitive, filenameOnly, showAll });
+  await search(queryParts.join(" "), {
+    caseInsensitive,
+    filenameOnly,
+    showAll,
+  });
 }
 
-main();
+main().catch((err) => {
+  console.error(err.message);
+  process.exit(1);
+});
