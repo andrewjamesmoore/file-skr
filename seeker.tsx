@@ -27,7 +27,7 @@ if (!process.getuid) {
 const cacheDirectory = `/tmp/seeker/${process.getuid()}`;
 const cacheFile = `${cacheDirectory}/results.json`;
 
-function isValidCacheDirectory(stats: fs.Stats, uid: number): boolean {
+export function isValidCacheDirectory(stats: fs.Stats, uid: number): boolean {
   return stats.uid === uid && stats.isDirectory() && !stats.isSymbolicLink();
 }
 

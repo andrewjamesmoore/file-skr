@@ -1,6 +1,22 @@
 {
+  "name": "file-skr",
+  "version": "1.0.0",
+  "description": "Search files and content; act on results by line number",
+  "bin": {
+    "seeker": "dist/seeker.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "esbuild seeker.tsx --bundle --platform=node --outfile=dist/seeker.js --banner:js='#!/usr/bin/env node' && sed -i '' '1d' dist/seeker.js",
+    "pretest": "npm run build",
+    "test": "vitest run"
+  },
   "devDependencies": {
-    "@types/node": "^25.5.2"
+    "@types/node": "^25.5.2",
+    "esbuild": "^0.28.0",
+    "vitest": "^2.1.9"
   },
   "dependencies": {
     "chalk": "^5.6.2"
