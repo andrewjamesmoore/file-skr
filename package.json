@@ -2,6 +2,10 @@
   "name": "file-skr",
   "version": "1.0.0",
   "description": "Search files and content; act on results by line number",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andrewjamesmoore/file-skr"
+  },
   "bin": {
     "seeker": "dist/seeker.js"
   },
