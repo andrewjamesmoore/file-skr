@@ -1,4 +1,4 @@
-# seeker
+# file-skr
 
 Search files and content and act on results by line number. Inspired by Metasploit's `search` / `use` workflow.
 
